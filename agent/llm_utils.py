@@ -42,7 +42,7 @@ def create_chat_completion(
     # validate input
     if model is None:
         raise ValueError("Model cannot be None")
-    if max_tokens is not None and max_tokens > 8001:
+    if max_tokens is not None and max_tokens > min(CFG.fast_token_limit, CFG.smart_token_limit):
         raise ValueError(f"Max tokens cannot be more than 8001, but got {max_tokens}")
     if stream and websocket is None:
         raise ValueError("Websocket cannot be None when stream is True")
@@ -62,12 +62,19 @@ def send_chat_completion_request(
     messages, model, temperature, max_tokens, stream, websocket
 ):
     if not stream:
+        headers = {}
+        if CFG.x_title_override:
+            headers['X-Title'] = CFG.x_title_override
+        if CFG.http_referrer_override:
+            headers['HTTP-Referer'] = CFG.http_referrer_override
+            
         result = lc_openai.ChatCompletion.create(
             model=model, # Change model here to use different models
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
             provider=CFG.llm_provider, # Change provider here to use a different API
+            headers=headers,
         )
         return result["choices"][0]["message"]["content"]
     else:
@@ -78,7 +85,12 @@ async def stream_response(model, messages, temperature, max_tokens, websocket):
     paragraph = ""
     response = ""
     print(f"streaming response...")
-
+    headers = {}
+    if CFG.x_title_override:
+        headers['X-Title'] = CFG.x_title_override
+    if CFG.http_referrer_override:
+        headers['HTTP-Referer'] = CFG.http_referrer_override
+        
     for chunk in lc_openai.ChatCompletion.create(
             model=model,
             messages=messages,
@@ -86,6 +98,7 @@ async def stream_response(model, messages, temperature, max_tokens, websocket):
             max_tokens=max_tokens,
             provider=CFG.llm_provider,
             stream=True,
+            headers=headers,
     ):
         content = chunk["choices"][0].get("delta", {}).get("content")
         if content is not None:
